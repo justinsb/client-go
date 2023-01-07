@@ -22,9 +22,12 @@ import (
 	"errors"
 	"fmt"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/typed"
+	internalapi "k8s.io/client-go/tools/leaderelection/resourcelock/internal/api"
 )
 
 // TODO: This is almost a exact replica of Endpoints lock.
@@ -36,15 +39,23 @@ type configMapLock struct {
 	// ConfigMapMeta should contain a Name and a Namespace of a
 	// ConfigMapMeta object that the LeaderElector will attempt to lead.
 	ConfigMapMeta metav1.ObjectMeta
-	Client        corev1client.ConfigMapsGetter
+	Client        dynamic.Interface
 	LockConfig    ResourceLockConfig
-	cm            *v1.ConfigMap
+	cm            *internalapi.ConfigMap
+}
+
+func (ll *configMapLock) ConfigMaps() typed.NamespaceClient[internalapi.ConfigMap] {
+	return typed.NewTypedNamespaceScoped[internalapi.ConfigMap](ll.Client, schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "configmaps",
+	})
 }
 
 // Get returns the election record from a ConfigMap Annotation
 func (cml *configMapLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, error) {
 	var record LeaderElectionRecord
-	cm, err := cml.Client.ConfigMaps(cml.ConfigMapMeta.Namespace).Get(ctx, cml.ConfigMapMeta.Name, metav1.GetOptions{})
+	cm, err := cml.ConfigMaps().Namespace(cml.ConfigMapMeta.Namespace).Get(ctx, cml.ConfigMapMeta.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -68,7 +79,7 @@ func (cml *configMapLock) Create(ctx context.Context, ler LeaderElectionRecord) 
 	if err != nil {
 		return err
 	}
-	cml.cm, err = cml.Client.ConfigMaps(cml.ConfigMapMeta.Namespace).Create(ctx, &v1.ConfigMap{
+	cml.cm, err = cml.ConfigMaps().Namespace(cml.ConfigMapMeta.Namespace).Create(ctx, &internalapi.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cml.ConfigMapMeta.Name,
 			Namespace: cml.ConfigMapMeta.Namespace,
@@ -93,7 +104,7 @@ func (cml *configMapLock) Update(ctx context.Context, ler LeaderElectionRecord) 
 		cml.cm.Annotations = make(map[string]string)
 	}
 	cml.cm.Annotations[LeaderElectionRecordAnnotationKey] = string(recordBytes)
-	cm, err := cml.Client.ConfigMaps(cml.ConfigMapMeta.Namespace).Update(ctx, cml.cm, metav1.UpdateOptions{})
+	cm, err := cml.ConfigMaps().Namespace(cml.ConfigMapMeta.Namespace).Update(ctx, cml.cm, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}

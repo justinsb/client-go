@@ -1,3 +1,5 @@
+//go:build typed
+
 /*
 Copyright 2019 The Kubernetes Authors.
 
@@ -23,9 +25,7 @@ import (
 	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	eventsv1 "k8s.io/api/events/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+		"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,6 +39,8 @@ import (
 	typedv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	typedeventsv1 "k8s.io/client-go/kubernetes/typed/events/v1"
 	restclient "k8s.io/client-go/rest"
+	corev1 "k8s.io/client-go/tools/events/internal/apis/core/v1"
+	eventsv1 "k8s.io/client-go/tools/events/internal/apis/events/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/record/util"
 	"k8s.io/klog/v2"

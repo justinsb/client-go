@@ -31,7 +31,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	openapi_v2 "github.com/google/gnostic/openapiv2"
 
-	apidiscovery "k8s.io/api/apidiscovery/v2beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +38,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/version"
-	"k8s.io/client-go/kubernetes/scheme"
+	apidiscovery "k8s.io/client-go/discovery/internal/apis/apidiscovery/v2beta1"
+
+	//"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/openapi"
 	restclient "k8s.io/client-go/rest"
 )
@@ -64,6 +65,8 @@ const (
 	// Prioritize aggregated discovery by placing first in the order of discovery accept types.
 	acceptDiscoveryFormats = AcceptV2Beta1 + "," + AcceptV1
 )
+
+var Codecs serializer.CodecFactory
 
 // DiscoveryInterface holds the methods that discover server-supported API groups,
 // versions and resources.
@@ -643,7 +646,7 @@ func setDiscoveryDefaults(config *restclient.Config) error {
 		// see https://issue.k8s.io/86149
 		config.Burst = defaultBurst
 	}
-	codec := runtime.NoopEncoder{Decoder: scheme.Codecs.UniversalDecoder()}
+	codec := runtime.NoopEncoder{Decoder: Codecs.UniversalDecoder()}
 	config.NegotiatedSerializer = serializer.NegotiatedSerializerWrapper(runtime.SerializerInfo{Serializer: codec})
 	if len(config.UserAgent) == 0 {
 		config.UserAgent = restclient.DefaultKubernetesUserAgent()

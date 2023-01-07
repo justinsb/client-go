@@ -33,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/openapi"
 	cachedopenapi "k8s.io/client-go/openapi/cached"
 	restclient "k8s.io/client-go/rest"
@@ -73,7 +72,7 @@ func (d *CachedDiscoveryClient) ServerResourcesForGroupVersion(groupVersion stri
 	// don't fail on errors, we either don't have a file or won't be able to run the cached check. Either way we can fallback.
 	if err == nil {
 		cachedResources := &metav1.APIResourceList{}
-		if err := runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), cachedBytes, cachedResources); err == nil {
+		if err := runtime.DecodeInto(discovery.Codecs.UniversalDecoder(), cachedBytes, cachedResources); err == nil {
 			klog.V(10).Infof("returning cached discovery info from %v", filename)
 			return cachedResources, nil
 		}
@@ -109,7 +108,7 @@ func (d *CachedDiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) {
 	// don't fail on errors, we either don't have a file or won't be able to run the cached check. Either way we can fallback.
 	if err == nil {
 		cachedGroups := &metav1.APIGroupList{}
-		if err := runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), cachedBytes, cachedGroups); err == nil {
+		if err := runtime.DecodeInto(discovery.Codecs.UniversalDecoder(), cachedBytes, cachedGroups); err == nil {
 			klog.V(10).Infof("returning cached discovery info from %v", filename)
 			return cachedGroups, nil
 		}
@@ -175,7 +174,7 @@ func (d *CachedDiscoveryClient) writeCachedFile(filename string, obj runtime.Obj
 		return err
 	}
 
-	bytes, err := runtime.Encode(scheme.Codecs.LegacyCodec(), obj)
+	bytes, err := runtime.Encode(discovery.Codecs.LegacyCodec(), obj)
 	if err != nil {
 		return err
 	}

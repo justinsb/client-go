@@ -1,3 +1,5 @@
+//go:build typed
+
 /*
 Copyright 2016 The Kubernetes Authors.
 

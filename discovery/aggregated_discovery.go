@@ -19,9 +19,9 @@ package discovery
 import (
 	"fmt"
 
-	apidiscovery "k8s.io/api/apidiscovery/v2beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	apidiscovery "k8s.io/client-go/discovery/internal/apis/apidiscovery/v2beta1"
 )
 
 // SplitGroupsAndResources transforms "aggregated" discovery top-level structure into

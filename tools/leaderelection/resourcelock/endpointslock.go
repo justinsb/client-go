@@ -22,24 +22,35 @@ import (
 	"errors"
 	"fmt"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/typed"
+	internalapi "k8s.io/client-go/tools/leaderelection/resourcelock/internal/api"
 )
 
 type endpointsLock struct {
 	// EndpointsMeta should contain a Name and a Namespace of an
 	// Endpoints object that the LeaderElector will attempt to lead.
 	EndpointsMeta metav1.ObjectMeta
-	Client        corev1client.EndpointsGetter
+	Client        dynamic.Interface
 	LockConfig    ResourceLockConfig
-	e             *v1.Endpoints
+	e             *internalapi.Endpoints
+}
+
+func (ll *endpointsLock) Endpoints() typed.NamespaceClient[internalapi.Endpoints] {
+	return typed.NewTypedNamespaceScoped[internalapi.Endpoints](ll.Client, schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "endpoints",
+	})
 }
 
 // Get returns the election record from a Endpoints Annotation
 func (el *endpointsLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, error) {
 	var record LeaderElectionRecord
-	ep, err := el.Client.Endpoints(el.EndpointsMeta.Namespace).Get(ctx, el.EndpointsMeta.Name, metav1.GetOptions{})
+	ep, err := el.Endpoints().Namespace(el.EndpointsMeta.Namespace).Get(ctx, el.EndpointsMeta.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,7 +74,7 @@ func (el *endpointsLock) Create(ctx context.Context, ler LeaderElectionRecord) e
 	if err != nil {
 		return err
 	}
-	el.e, err = el.Client.Endpoints(el.EndpointsMeta.Namespace).Create(ctx, &v1.Endpoints{
+	el.e, err = el.Endpoints().Namespace(el.EndpointsMeta.Namespace).Create(ctx, &internalapi.Endpoints{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      el.EndpointsMeta.Name,
 			Namespace: el.EndpointsMeta.Namespace,
@@ -88,7 +99,7 @@ func (el *endpointsLock) Update(ctx context.Context, ler LeaderElectionRecord) e
 		el.e.Annotations = make(map[string]string)
 	}
 	el.e.Annotations[LeaderElectionRecordAnnotationKey] = string(recordBytes)
-	e, err := el.Client.Endpoints(el.EndpointsMeta.Namespace).Update(ctx, el.e, metav1.UpdateOptions{})
+	e, err := el.Endpoints().Namespace(el.EndpointsMeta.Namespace).Update(ctx, el.e, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}

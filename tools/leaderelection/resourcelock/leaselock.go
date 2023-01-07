@@ -25,21 +25,32 @@ import (
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	coordinationv1client "k8s.io/client-go/kubernetes/typed/coordination/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/typed"
+	internalapi "k8s.io/client-go/tools/leaderelection/resourcelock/internal/api"
 )
 
 type LeaseLock struct {
 	// LeaseMeta should contain a Name and a Namespace of a
 	// LeaseMeta object that the LeaderElector will attempt to lead.
 	LeaseMeta  metav1.ObjectMeta
-	Client     coordinationv1client.LeasesGetter
+	Client     dynamic.Interface
 	LockConfig ResourceLockConfig
-	lease      *coordinationv1.Lease
+	lease      *internalapi.Lease
+}
+
+func (ll *LeaseLock) Leases() typed.NamespaceClient[internalapi.Lease] {
+	return typed.NewTypedNamespaceScoped[internalapi.Lease](ll.Client, schema.GroupVersionResource{
+		Group:    "coordination.k8s.io",
+		Version:  "v1",
+		Resource: "leases",
+	})
 }
 
 // Get returns the election record from a Lease spec
 func (ll *LeaseLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, error) {
-	lease, err := ll.Client.Leases(ll.LeaseMeta.Namespace).Get(ctx, ll.LeaseMeta.Name, metav1.GetOptions{})
+	lease, err := ll.Leases().Namespace(ll.LeaseMeta.Namespace).Get(ctx, ll.LeaseMeta.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -55,7 +66,7 @@ func (ll *LeaseLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, er
 // Create attempts to create a Lease
 func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error {
 	var err error
-	ll.lease, err = ll.Client.Leases(ll.LeaseMeta.Namespace).Create(ctx, &coordinationv1.Lease{
+	ll.lease, err = ll.Leases().Namespace(ll.LeaseMeta.Namespace).Create(ctx, &internalapi.Lease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ll.LeaseMeta.Name,
 			Namespace: ll.LeaseMeta.Namespace,
@@ -72,7 +83,7 @@ func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error
 	}
 	ll.lease.Spec = LeaderElectionRecordToLeaseSpec(&ler)
 
-	lease, err := ll.Client.Leases(ll.LeaseMeta.Namespace).Update(ctx, ll.lease, metav1.UpdateOptions{})
+	lease, err := ll.Leases().Namespace(ll.LeaseMeta.Namespace).Update(ctx, ll.lease, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -105,7 +116,7 @@ func (ll *LeaseLock) Identity() string {
 	return ll.LockConfig.Identity
 }
 
-func LeaseSpecToLeaderElectionRecord(spec *coordinationv1.LeaseSpec) *LeaderElectionRecord {
+func LeaseSpecToLeaderElectionRecord(spec *internalapi.LeaseSpec) *LeaderElectionRecord {
 	var r LeaderElectionRecord
 	if spec.HolderIdentity != nil {
 		r.HolderIdentity = *spec.HolderIdentity
@@ -126,10 +137,10 @@ func LeaseSpecToLeaderElectionRecord(spec *coordinationv1.LeaseSpec) *LeaderElec
 
 }
 
-func LeaderElectionRecordToLeaseSpec(ler *LeaderElectionRecord) coordinationv1.LeaseSpec {
+func LeaderElectionRecordToLeaseSpec(ler *LeaderElectionRecord) internalapi.LeaseSpec {
 	leaseDurationSeconds := int32(ler.LeaseDurationSeconds)
 	leaseTransitions := int32(ler.LeaderTransitions)
-	return coordinationv1.LeaseSpec{
+	return internalapi.LeaseSpec{
 		HolderIdentity:       &ler.HolderIdentity,
 		LeaseDurationSeconds: &leaseDurationSeconds,
 		AcquireTime:          &metav1.MicroTime{ler.AcquireTime.Time},

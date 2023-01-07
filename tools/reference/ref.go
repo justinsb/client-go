@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,10 +39,12 @@ func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReferen
 	if obj == nil {
 		return nil, ErrNilObject
 	}
-	if ref, ok := obj.(*v1.ObjectReference); ok {
-		// Don't make a reference to a reference.
-		return ref, nil
-	}
+
+	// TODO: Block this - maybe enforce that obj must be a "true" object
+	// if ref, ok := obj.(*v1.ObjectReference); ok {
+	// 	// Don't make a reference to a reference.
+	// 	return ref, nil
+	// }
 
 	// An object that implements only List has enough metadata to build a reference
 	var listMeta metav1.Common

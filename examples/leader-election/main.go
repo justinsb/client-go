@@ -26,7 +26,7 @@ import (
 
 	"github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
@@ -80,7 +80,7 @@ func main() {
 	if err != nil {
 		klog.Fatal(err)
 	}
-	client := clientset.NewForConfigOrDie(config)
+	client := dynamic.NewForConfigOrDie(config)
 
 	run := func(ctx context.Context) {
 		// complete your controller loop here
@@ -112,7 +112,7 @@ func main() {
 			Name:      leaseLockName,
 			Namespace: leaseLockNamespace,
 		},
-		Client: client.CoordinationV1(),
+		Client: client,
 		LockConfig: resourcelock.ResourceLockConfig{
 			Identity: id,
 		},
