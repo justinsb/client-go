@@ -17,21 +17,27 @@ limitations under the License.
 package record
 
 import (
+	goerrors "errors"
 	"fmt"
 	"math/rand"
 	"time"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	restclient "k8s.io/client-go/rest"
+	v1 "k8s.io/client-go/tools/record/internal/apis/core/v1"
 	"k8s.io/client-go/tools/record/util"
-	ref "k8s.io/client-go/tools/reference"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/clock"
+)
+
+var (
+	// Errors that could be returned by GetReference.
+	ErrNilObject = goerrors.New("can't reference a nil object")
 )
 
 const maxTriesPerEvent = 12
@@ -109,6 +115,13 @@ type EventRecorder interface {
 	AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{})
 }
 
+type EventSource struct {
+	// Component from which the event is generated.
+	Component string
+	// Node name on which the event is generated.
+	Host string
+}
+
 // EventBroadcaster knows how to receive events and send them to any EventSink, watcher, or log.
 type EventBroadcaster interface {
 	// StartEventWatcher starts sending events received from this EventBroadcaster to the given
@@ -130,7 +143,7 @@ type EventBroadcaster interface {
 
 	// NewRecorder returns an EventRecorder that can be used to send events to this EventBroadcaster
 	// with the event source set to the given event source.
-	NewRecorder(scheme *runtime.Scheme, source v1.EventSource) EventRecorder
+	NewRecorder(scheme *runtime.Scheme, source EventSource) EventRecorder
 
 	// Shutdown shuts down the broadcaster
 	Shutdown()
@@ -318,8 +331,12 @@ func (e *eventBroadcasterImpl) StartEventWatcher(eventHandler func(*v1.Event)) w
 }
 
 // NewRecorder returns an EventRecorder that records events with the given event source.
-func (e *eventBroadcasterImpl) NewRecorder(scheme *runtime.Scheme, source v1.EventSource) EventRecorder {
-	return &recorderImpl{scheme, source, e.Broadcaster, clock.RealClock{}}
+func (e *eventBroadcasterImpl) NewRecorder(scheme *runtime.Scheme, source EventSource) EventRecorder {
+	sourceV1 := v1.EventSource{
+		Component: source.Component,
+		Host:      source.Host,
+	}
+	return &recorderImpl{scheme, sourceV1, e.Broadcaster, clock.RealClock{}}
 }
 
 type recorderImpl struct {
@@ -329,8 +346,77 @@ type recorderImpl struct {
 	clock clock.PassiveClock
 }
 
+// GetReference returns an ObjectReference which refers to the given
+// object, or an error if the object doesn't follow the conventions
+// that would allow this.
+// TODO: should take a meta.Interface see https://issue.k8s.io/7127
+func getReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReference, error) {
+	if obj == nil {
+		return nil, ErrNilObject
+	}
+
+	// TODO: Block this - maybe enforce that obj must be a "true" object
+	// if ref, ok := obj.(*v1.ObjectReference); ok {
+	// 	// Don't make a reference to a reference.
+	// 	return ref, nil
+	// }
+
+	// An object that implements only List has enough metadata to build a reference
+	var listMeta metav1.Common
+	objectMeta, err := meta.Accessor(obj)
+	if err != nil {
+		listMeta, err = meta.CommonAccessor(obj)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		listMeta = objectMeta
+	}
+
+	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	// If object meta doesn't contain data about kind and/or version,
+	// we are falling back to scheme.
+	//
+	// TODO: This doesn't work for CRDs, which are not registered in scheme.
+	if gvk.Empty() {
+		gvks, _, err := scheme.ObjectKinds(obj)
+		if err != nil {
+			return nil, err
+		}
+		if len(gvks) == 0 || gvks[0].Empty() {
+			return nil, fmt.Errorf("unexpected gvks registered for object %T: %v", obj, gvks)
+		}
+		// TODO: The same object can be registered for multiple group versions
+		// (although in practise this doesn't seem to be used).
+		// In such case, the version set may not be correct.
+		gvk = gvks[0]
+	}
+
+	kind := gvk.Kind
+	version := gvk.GroupVersion().String()
+
+	// only has list metadata
+	if objectMeta == nil {
+		return &v1.ObjectReference{
+			Kind:            kind,
+			APIVersion:      version,
+			ResourceVersion: listMeta.GetResourceVersion(),
+		}, nil
+	}
+
+	return &v1.ObjectReference{
+		Kind:            kind,
+		APIVersion:      version,
+		Name:            objectMeta.GetName(),
+		Namespace:       objectMeta.GetNamespace(),
+		UID:             objectMeta.GetUID(),
+		ResourceVersion: objectMeta.GetResourceVersion(),
+	}, nil
+}
+
 func (recorder *recorderImpl) generateEvent(object runtime.Object, annotations map[string]string, eventtype, reason, message string) {
-	ref, err := ref.GetReference(recorder.scheme, object)
+	ref, err := getReference(recorder.scheme, object)
 	if err != nil {
 		klog.Errorf("Could not construct reference to: '%#v' due to: '%v'. Will not report event: '%v' '%v' '%v'", object, err, eventtype, reason, message)
 		return

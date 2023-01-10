@@ -22,13 +22,12 @@ import (
 	"errors"
 	"fmt"
 
-	coordinationv1 "k8s.io/api/coordination/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/typed"
-	internalapi "k8s.io/client-go/tools/leaderelection/resourcelock/internal/api"
+	coordinationv1 "k8s.io/client-go/tools/leaderelection/resourcelock/internal/apis/coordination/v1"
+	corev1 "k8s.io/client-go/tools/leaderelection/resourcelock/internal/apis/core/v1"
 )
 
 type LeaseLock struct {
@@ -37,11 +36,11 @@ type LeaseLock struct {
 	LeaseMeta  metav1.ObjectMeta
 	Client     dynamic.Interface
 	LockConfig ResourceLockConfig
-	lease      *internalapi.Lease
+	lease      *coordinationv1.Lease
 }
 
-func (ll *LeaseLock) Leases() typed.NamespaceClient[internalapi.Lease] {
-	return typed.NewTypedNamespaceScoped[internalapi.Lease](ll.Client, schema.GroupVersionResource{
+func (ll *LeaseLock) Leases() typed.NamespaceClient[coordinationv1.Lease] {
+	return typed.NewTypedNamespaceScoped[coordinationv1.Lease](ll.Client, schema.GroupVersionResource{
 		Group:    "coordination.k8s.io",
 		Version:  "v1",
 		Resource: "leases",
@@ -66,7 +65,7 @@ func (ll *LeaseLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, er
 // Create attempts to create a Lease
 func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error {
 	var err error
-	ll.lease, err = ll.Leases().Namespace(ll.LeaseMeta.Namespace).Create(ctx, &internalapi.Lease{
+	ll.lease, err = ll.Leases().Namespace(ll.LeaseMeta.Namespace).Create(ctx, &coordinationv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ll.LeaseMeta.Name,
 			Namespace: ll.LeaseMeta.Namespace,
@@ -101,7 +100,7 @@ func (ll *LeaseLock) RecordEvent(s string) {
 	subject := &coordinationv1.Lease{ObjectMeta: ll.lease.ObjectMeta}
 	// Populate the type meta, so we don't have to get it from the schema
 	subject.Kind = "Lease"
-	subject.APIVersion = coordinationv1.SchemeGroupVersion.String()
+	subject.APIVersion = "coordination.k8s.io/v1" //coordinationv1.SchemeGroupVersion.String()
 	ll.LockConfig.EventRecorder.Eventf(subject, corev1.EventTypeNormal, "LeaderElection", events)
 }
 
@@ -116,7 +115,7 @@ func (ll *LeaseLock) Identity() string {
 	return ll.LockConfig.Identity
 }
 
-func LeaseSpecToLeaderElectionRecord(spec *internalapi.LeaseSpec) *LeaderElectionRecord {
+func LeaseSpecToLeaderElectionRecord(spec *coordinationv1.LeaseSpec) *LeaderElectionRecord {
 	var r LeaderElectionRecord
 	if spec.HolderIdentity != nil {
 		r.HolderIdentity = *spec.HolderIdentity
@@ -137,10 +136,10 @@ func LeaseSpecToLeaderElectionRecord(spec *internalapi.LeaseSpec) *LeaderElectio
 
 }
 
-func LeaderElectionRecordToLeaseSpec(ler *LeaderElectionRecord) internalapi.LeaseSpec {
+func LeaderElectionRecordToLeaseSpec(ler *LeaderElectionRecord) coordinationv1.LeaseSpec {
 	leaseDurationSeconds := int32(ler.LeaseDurationSeconds)
 	leaseTransitions := int32(ler.LeaderTransitions)
-	return internalapi.LeaseSpec{
+	return coordinationv1.LeaseSpec{
 		HolderIdentity:       &ler.HolderIdentity,
 		LeaseDurationSeconds: &leaseDurationSeconds,
 		AcquireTime:          &metav1.MicroTime{ler.AcquireTime.Time},

@@ -22,12 +22,11 @@ import (
 	"errors"
 	"fmt"
 
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/typed"
-	internalapi "k8s.io/client-go/tools/leaderelection/resourcelock/internal/api"
+	corev1 "k8s.io/client-go/tools/leaderelection/resourcelock/internal/apis/core/v1"
 )
 
 type endpointsLock struct {
@@ -36,11 +35,11 @@ type endpointsLock struct {
 	EndpointsMeta metav1.ObjectMeta
 	Client        dynamic.Interface
 	LockConfig    ResourceLockConfig
-	e             *internalapi.Endpoints
+	e             *corev1.Endpoints
 }
 
-func (ll *endpointsLock) Endpoints() typed.NamespaceClient[internalapi.Endpoints] {
-	return typed.NewTypedNamespaceScoped[internalapi.Endpoints](ll.Client, schema.GroupVersionResource{
+func (ll *endpointsLock) Endpoints() typed.NamespaceClient[corev1.Endpoints] {
+	return typed.NewTypedNamespaceScoped[corev1.Endpoints](ll.Client, schema.GroupVersionResource{
 		Group:    "",
 		Version:  "v1",
 		Resource: "endpoints",
@@ -74,7 +73,7 @@ func (el *endpointsLock) Create(ctx context.Context, ler LeaderElectionRecord) e
 	if err != nil {
 		return err
 	}
-	el.e, err = el.Endpoints().Namespace(el.EndpointsMeta.Namespace).Create(ctx, &internalapi.Endpoints{
+	el.e, err = el.Endpoints().Namespace(el.EndpointsMeta.Namespace).Create(ctx, &corev1.Endpoints{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      el.EndpointsMeta.Name,
 			Namespace: el.EndpointsMeta.Namespace,
@@ -113,11 +112,11 @@ func (el *endpointsLock) RecordEvent(s string) {
 		return
 	}
 	events := fmt.Sprintf("%v %v", el.LockConfig.Identity, s)
-	subject := &v1.Endpoints{ObjectMeta: el.e.ObjectMeta}
+	subject := &corev1.Endpoints{ObjectMeta: el.e.ObjectMeta}
 	// Populate the type meta, so we don't have to get it from the schema
 	subject.Kind = "Endpoints"
-	subject.APIVersion = v1.SchemeGroupVersion.String()
-	el.LockConfig.EventRecorder.Eventf(subject, v1.EventTypeNormal, "LeaderElection", events)
+	subject.APIVersion = "v1" //v1.SchemeGroupVersion.String()
+	el.LockConfig.EventRecorder.Eventf(subject, corev1.EventTypeNormal, "LeaderElection", events)
 }
 
 // Describe is used to convert details on current resource lock

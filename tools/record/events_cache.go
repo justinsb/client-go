@@ -25,7 +25,7 @@ import (
 
 	"github.com/golang/groupcache/lru"
 
-	v1 "k8s.io/api/core/v1"
+	v1 "k8s.io/client-go/tools/record/internal/apis/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"

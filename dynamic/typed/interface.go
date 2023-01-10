@@ -11,7 +11,10 @@ import (
 )
 
 func NewTypedNamespaceScoped[T any](client dynamic.Interface, gvr schema.GroupVersionResource) NamespaceClient[T] {
-	panic("NewTypedNamespaceScoped not implemented")
+	return &namespacedClient[T]{
+		client: client,
+		gvr:    gvr,
+	}
 }
 
 func NewTypedClusterScoped[T any](client dynamic.Interface, gvr schema.GroupVersionResource) Client[T] {

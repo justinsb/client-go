@@ -19,8 +19,8 @@ package util
 import (
 	"net/http"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/client-go/tools/record/internal/apis/core/v1"
 )
 
 // ValidateEventType checks that eventtype is an expected type of event

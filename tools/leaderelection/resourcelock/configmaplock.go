@@ -22,12 +22,11 @@ import (
 	"errors"
 	"fmt"
 
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/typed"
-	internalapi "k8s.io/client-go/tools/leaderelection/resourcelock/internal/api"
+	corev1 "k8s.io/client-go/tools/leaderelection/resourcelock/internal/apis/core/v1"
 )
 
 // TODO: This is almost a exact replica of Endpoints lock.
@@ -41,11 +40,11 @@ type configMapLock struct {
 	ConfigMapMeta metav1.ObjectMeta
 	Client        dynamic.Interface
 	LockConfig    ResourceLockConfig
-	cm            *internalapi.ConfigMap
+	cm            *corev1.ConfigMap
 }
 
-func (ll *configMapLock) ConfigMaps() typed.NamespaceClient[internalapi.ConfigMap] {
-	return typed.NewTypedNamespaceScoped[internalapi.ConfigMap](ll.Client, schema.GroupVersionResource{
+func (ll *configMapLock) ConfigMaps() typed.NamespaceClient[corev1.ConfigMap] {
+	return typed.NewTypedNamespaceScoped[corev1.ConfigMap](ll.Client, schema.GroupVersionResource{
 		Group:    "",
 		Version:  "v1",
 		Resource: "configmaps",
@@ -79,7 +78,7 @@ func (cml *configMapLock) Create(ctx context.Context, ler LeaderElectionRecord) 
 	if err != nil {
 		return err
 	}
-	cml.cm, err = cml.ConfigMaps().Namespace(cml.ConfigMapMeta.Namespace).Create(ctx, &internalapi.ConfigMap{
+	cml.cm, err = cml.ConfigMaps().Namespace(cml.ConfigMapMeta.Namespace).Create(ctx, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cml.ConfigMapMeta.Name,
 			Namespace: cml.ConfigMapMeta.Namespace,
@@ -118,11 +117,11 @@ func (cml *configMapLock) RecordEvent(s string) {
 		return
 	}
 	events := fmt.Sprintf("%v %v", cml.LockConfig.Identity, s)
-	subject := &v1.ConfigMap{ObjectMeta: cml.cm.ObjectMeta}
+	subject := &corev1.ConfigMap{ObjectMeta: cml.cm.ObjectMeta}
 	// Populate the type meta, so we don't have to get it from the schema
 	subject.Kind = "ConfigMap"
-	subject.APIVersion = v1.SchemeGroupVersion.String()
-	cml.LockConfig.EventRecorder.Eventf(subject, v1.EventTypeNormal, "LeaderElection", events)
+	subject.APIVersion = "v1" //internalapi.SchemeGroupVersion.String()
+	cml.LockConfig.EventRecorder.Eventf(subject, corev1.EventTypeNormal, "LeaderElection", events)
 }
 
 // Describe is used to convert details on current resource lock

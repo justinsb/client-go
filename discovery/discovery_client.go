@@ -68,6 +68,11 @@ const (
 
 var Codecs serializer.CodecFactory
 
+func init() {
+	scheme := runtime.NewScheme()
+	Codecs = serializer.NewCodecFactory(scheme)
+}
+
 // DiscoveryInterface holds the methods that discover server-supported API groups,
 // versions and resources.
 type DiscoveryInterface interface {
